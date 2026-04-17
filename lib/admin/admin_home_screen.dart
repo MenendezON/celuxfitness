@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/models.dart';
 import '../../core/services/firestore_service.dart';
@@ -59,13 +60,39 @@ class _DashboardTab extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Administration'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await AuthService().signOut();
-              if (!context.mounted) return;
-              Navigator.pushReplacementNamed(context, '/login');
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) async {
+              switch (value) {
+                case 'logout':
+                  await AuthService().signOut();
+                  if (!context.mounted) return;
+                  Navigator.pushReplacementNamed(context, '/login');
+                  break;
+                case 'about' :
+                  break;
+              }
             },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 18, color: Colors.black,),
+                    SizedBox(width: 8),
+                    Text('Logout'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'about',
+                child: Row(
+                  children: [
+                    Text('A propos'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -75,7 +102,12 @@ class _DashboardTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // KPIs (US-017)
-            Text('Vue d\'ensemble', style: Theme.of(context).textTheme.titleMedium),
+            Row(
+              children: [
+                Text('Vue d\'ensemble : ', style: Theme.of(context).textTheme.titleMedium),
+                Text(DateFormat('EEEE d MMMM yyyy', 'fr').format(DateTime.now()))
+              ],
+            ),
             const SizedBox(height: 10),
             FutureBuilder<Map<String, dynamic>>(
               future: svc.adminDashboardStats(),
@@ -189,22 +221,37 @@ class _RecentMembers extends StatelessWidget {
     final svc = FirestoreService();
     return StreamBuilder<List<UserModel>>(
       stream: svc.membersStream(limit: 5),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator(color: AppColors.green));
+        builder: (context, snap) {
+          if (snap.hasError) {
+            return Text('Erreur: ${snap.error}');
+          }
+
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.green),
+            );
+          }
+
+          final members = snap.data ?? [];
+
+          if (members.isEmpty) {
+            return const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Aucun membre'),
+            );
+          }
+
+          return Container(
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.borderGray, width: 0.5),
+            ),
+            child: Column(
+              children: members.map((m) => _MemberRow(member: m)).toList(),
+            ),
+          );
         }
-        final members = snap.data ?? [];
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.borderGray, width: 0.5),
-          ),
-          child: Column(
-            children: members.map((m) => _MemberRow(member: m)).toList(),
-          ),
-        );
-      },
     );
   }
 }
@@ -222,10 +269,9 @@ class _MemberRow extends StatelessWidget {
           CircleAvatar(
             radius: 18,
             backgroundColor: AppColors.greenLight,
-            backgroundImage: member.photoUrl != null ? NetworkImage(member.photoUrl!) : null,
-            child: member.photoUrl == null
-                ? Text(member.initials, style: const TextStyle(fontSize: 11, color: AppColors.green, fontWeight: FontWeight.w700))
-                : null,
+            backgroundImage: (member.photoUrl != null && member.photoUrl!.isNotEmpty)
+                ? NetworkImage(member.photoUrl!)
+                : const AssetImage('assets/images/default_avatar.jpg') as ImageProvider,
           ),
           const SizedBox(width: 10),
           Expanded(

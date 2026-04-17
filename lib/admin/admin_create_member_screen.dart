@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -52,20 +53,32 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
         setState(() => _loading = false);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cet email est deja utilise.'), backgroundColor: AppColors.red),
+          const SnackBar(content: Text('Cet email est déjà utilisé.'), backgroundColor: AppColors.red),
         );
         return;
       }
 
       // Creer via Firebase Admin (en production, appeler une Cloud Function)
+
       // Ici simulation avec createUserWithEmailAndPassword
       final adminAuth = AuthService();
       final currentAdmin = adminAuth.currentUser!.uid;
 
-      // Creation du profil Firestore directement
-      // (en production : Cloud Function cree le compte Auth + profile)
-      final uid = FirebaseFirestore.instance.collection('users').doc().id;
-      final months = int.parse(_selectedDuration);
+      final adminUid = FirebaseAuth.instance.currentUser!.uid;
+
+      final secondaryApp = await Firebase.initializeApp(
+        name: 'Secondary',
+        options: Firebase.app().options,
+      );
+
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      final userCredential = await secondaryAuth.createUserWithEmailAndPassword(
+        email: _emailCtrl.text.trim(),
+        password: tempPassword,
+      );
+
+      final uid = userCredential.user!.uid;
       final now = DateTime.now();
 
       final user = UserModel(
@@ -78,6 +91,18 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
         createdAt: now,
         createdByAdmin: currentAdmin,
       );
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).set(user.toMap());
+
+      await secondaryApp.delete();
+
+      // Creation du profil Firestore directement
+      // Créer le user (ça switch de session)
+
+
+      final newAuth = userCredential.user!.uid;
+      // (en production : Cloud Function cree le compte Auth + profile)
+      final months = int.parse(_selectedDuration);
 
       final svc = FirestoreService();
       await svc.createMemberProfile(user);
@@ -104,7 +129,7 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
       setState(() => _loading = false);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur : $e'), backgroundColor: AppColors.red),
+        SnackBar(content: Text('Erreur-: $e'), backgroundColor: AppColors.red),
       );
     }
   }

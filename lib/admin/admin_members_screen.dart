@@ -178,11 +178,9 @@ class _MemberCard extends StatelessWidget {
           CircleAvatar(
             radius: 22,
             backgroundColor: AppColors.greenLight,
-            backgroundImage: member.photoUrl != null ? NetworkImage(member.photoUrl!) : null,
-            child: member.photoUrl == null
-                ? Text(member.initials,
-                style: const TextStyle(fontSize: 13, color: AppColors.green, fontWeight: FontWeight.w700))
-                : null,
+            backgroundImage: (member.photoUrl != null && member.photoUrl!.isNotEmpty)
+                ? NetworkImage(member.photoUrl!)
+                : const AssetImage('assets/images/default_avatar.jpg') as ImageProvider,
           ),
           const SizedBox(width: 12),
           Expanded(
