@@ -233,4 +233,15 @@ class FirestoreService {
       'monthCourses': monthCourses.count ?? 0,
     };
   }
+
+  Stream<List<SubscriptionModel>> subscriptionsStream() {
+    return FirebaseFirestore.instance
+        .collection('subscriptions')
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return SubscriptionModel.fromMap(doc.data(), doc.id);
+      }).toList();
+    });
+  }
 }

@@ -219,46 +219,81 @@ class _RecentMembers extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final svc = FirestoreService();
+
     return StreamBuilder<List<UserModel>>(
       stream: svc.membersStream(limit: 5),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return Text('Erreur: ${snap.error}');
-          }
+      builder: (context, userSnap) {
+        if (userSnap.hasError) {
+          return Text('Erreur: ${userSnap.error}');
+        }
 
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.green),
-            );
-          }
-
-          final members = snap.data ?? [];
-
-          if (members.isEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Aucun membre'),
-            );
-          }
-
-          return Container(
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.borderGray, width: 0.5),
-            ),
-            child: Column(
-              children: members.map((m) => _MemberRow(member: m)).toList(),
-            ),
+        if (userSnap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.green),
           );
         }
+
+        final members = userSnap.data ?? [];
+
+        if (members.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('Aucun membre'),
+          );
+        }
+
+        // 🔥 SECOND STREAM: subscriptions
+        return StreamBuilder<List<SubscriptionModel>>(
+          stream: svc.subscriptionsStream(),
+          builder: (context, subSnap) {
+            final subs = subSnap.data ?? [];
+
+            // 🔥 build map userId -> subscription
+            final subMap = {
+              for (final s in subs) s.userId: s,
+            };
+
+            // 🔥 combine
+            final combined = members.map((m) {
+              return UserWithSubscription(
+                user: m,
+                subscription: subMap[m.uid],
+              );
+            }).toList();
+
+            return Container(
+              decoration: BoxDecoration(
+                color: AppColors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: AppColors.borderGray,
+                  width: 0.5,
+                ),
+              ),
+              child: Column(
+                children: combined
+                    .map((item) => _MemberRow(
+                  member: item.user,
+                  subscription: item.subscription,
+                ))
+                    .toList(),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
 
 class _MemberRow extends StatelessWidget {
   final UserModel member;
-  const _MemberRow({required this.member});
+  final SubscriptionModel? subscription;
+
+  const _MemberRow({
+    required this.member,
+    this.subscription,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -280,16 +315,21 @@ class _MemberRow extends StatelessWidget {
               children: [
                 Text(member.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
                 Text(member.email, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                Text(subscription?.plan ?? 'No subscription'),
               ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppColors.greenLight,
-              borderRadius: BorderRadius.circular(20),
+              color: subscription?.statusColor,
+              borderRadius: BorderRadius.circular(5),
             ),
-            child: const Text('Actif', style: TextStyle(fontSize: 10, color: Color(0xFF0F6E56), fontWeight: FontWeight.w600)),
+            child: Text(subscription?.status.name != null
+                ? subscription!.status.name[0].toUpperCase() +
+                subscription!.status.name.substring(1)
+                : '',
+                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
           ),
         ],
       ),

@@ -1,3 +1,7 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+
 enum UserRole { member, coach, admin }
 
 enum SubscriptionStatus { active, expired, suspended, pending }
@@ -110,6 +114,31 @@ class SubscriptionModel {
     'status': status.name,
     'paymentMethod': paymentMethod,
   };
+
+  Color get statusColor {
+    switch (status) {
+      case SubscriptionStatus.active:
+        return Colors.green;
+      case SubscriptionStatus.expired:
+        return Colors.red;
+      case SubscriptionStatus.pending:
+        return Colors.orange;
+      case SubscriptionStatus.suspended:
+        return Colors.grey;
+    }
+  }
+}
+
+class UserWithSubscription {
+  final UserModel user;
+  final SubscriptionModel? subscription;
+
+  UserWithSubscription({
+    required this.user,
+    this.subscription,
+  });
+
+
 }
 
 class CourseModel {
