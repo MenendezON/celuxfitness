@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 enum UserRole { member, coach, admin }
-
 enum SubscriptionStatus { active, expired, suspended, pending }
 
 class UserModel {
@@ -14,6 +13,7 @@ class UserModel {
   final String? phone;
   final String? photoUrl;
   final UserRole role;
+  final String? gender;
   final String level; // debutant / intermediaire / avance
   final String? goal;
   final DateTime createdAt;
@@ -24,6 +24,7 @@ class UserModel {
     required this.firstName,
     required this.lastName,
     required this.email,
+    this.gender,
     this.phone,
     this.photoUrl,
     required this.role,
@@ -42,6 +43,7 @@ class UserModel {
     firstName: map['firstName'] ?? '',
     lastName: map['lastName'] ?? '',
     email: map['email'] ?? '',
+    gender: map['gender'] ?? '',
     phone: map['phone'],
     photoUrl: map['photoUrl'],
     role: UserRole.values.firstWhere(
@@ -60,6 +62,7 @@ class UserModel {
     'email': email,
     'phone': phone,
     'photoUrl': photoUrl,
+    'gender': gender,
     'role': role.name,
     'level': level,
     'goal': goal,

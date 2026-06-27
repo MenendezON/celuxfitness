@@ -329,7 +329,8 @@ class _MemberRow extends StatelessWidget {
                 ? subscription!.status.name[0].toUpperCase() +
                 subscription!.status.name.substring(1)
                 : '',
-                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600)),
+                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),

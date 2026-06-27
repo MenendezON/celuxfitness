@@ -25,10 +25,12 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
 
   UserRole _selectedRole = UserRole.member;
   String _selectedPlan = 'standard';
+  String _selectedGender = 'homme';
   String _selectedDuration = '1';
   bool _loading = false;
 
   final _plans = ['standard', 'premium'];
+  final _gender = ['homme', 'femme'];
   final _durations = ['1', '3', '6', '12'];
   final _durationLabels = {'1': '1 mois', '3': '3 mois', '6': '6 mois', '12': '1 an'};
 
@@ -64,7 +66,7 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
       final adminAuth = AuthService();
       final currentAdmin = adminAuth.currentUser!.uid;
 
-      final adminUid = FirebaseAuth.instance.currentUser!.uid;
+      //final adminUid = FirebaseAuth.instance.currentUser!.uid;
 
       final secondaryApp = await Firebase.initializeApp(
         name: 'Secondary',
@@ -86,13 +88,14 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
         firstName: _firstNameCtrl.text.trim(),
         lastName: _lastNameCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
+        gender : _selectedGender,
         phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         role: _selectedRole,
         createdAt: now,
         createdByAdmin: currentAdmin,
       );
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).set(user.toMap());
+      //await FirebaseFirestore.instance.collection('users').doc(uid).set(user.toMap());
 
       await secondaryApp.delete();
 
@@ -100,12 +103,12 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
       // Créer le user (ça switch de session)
 
 
-      final newAuth = userCredential.user!.uid;
+      //final newAuth = userCredential.user!.uid;
       // (en production : Cloud Function cree le compte Auth + profile)
       final months = int.parse(_selectedDuration);
 
       final svc = FirestoreService();
-      await svc.createMemberProfile(user);
+      //await svc.createMemberProfile(user);
 
       // Creer l'abonnement initial
       await FirebaseFirestore.instance.collection('subscriptions').add({
@@ -165,11 +168,10 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-
               // Informations personnelles
               _SectionTitle(title: 'Informations personnelles'),
-              const SizedBox(height: 12),
 
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -189,6 +191,7 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                   ),
                 ],
               ),
+
               const SizedBox(height: 12),
               TextFormField(
                 controller: _emailCtrl,
@@ -203,6 +206,7 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                   return null;
                 },
               ),
+
               const SizedBox(height: 12),
               TextFormField(
                 controller: _phoneCtrl,
@@ -215,9 +219,29 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
               ),
 
               const SizedBox(height: 20),
-              _SectionTitle(title: 'Role'),
-              const SizedBox(height: 10),
+              _SectionTitle(title: 'Sexe'),
+              Row(
+                children: _gender.map((p) {
+                  final selected = _selectedGender == p;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: FilterChip(
+                      label: Text(p == 'homme' ? 'Homme' : 'Femme'),
+                      selected: selected,
+                      onSelected: (_) => setState(() => _selectedGender = p),
+                      selectedColor: AppColors.green,
+                      labelStyle: TextStyle(
+                        color: selected ? Colors.white : AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      checkmarkColor: Colors.white,
+                    ),
+                  );
+                }).toList(),
+              ),
 
+              const SizedBox(height: 20),
+              _SectionTitle(title: 'Role'),
               // Role selector
               Row(
                 children: UserRole.values.where((r) => r != UserRole.admin).map((r) {
@@ -241,8 +265,6 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
 
               const SizedBox(height: 20),
               _SectionTitle(title: 'Abonnement initial'),
-              const SizedBox(height: 10),
-
               // Plan
               Row(
                 children: _plans.map((p) {
@@ -263,8 +285,8 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: 10),
 
+              const SizedBox(height: 10),
               // Duree
               Wrap(
                 spacing: 8,
@@ -283,7 +305,6 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
               ),
 
               const SizedBox(height: 28),
-
               SizedBox(
                 height: 52,
                 child: ElevatedButton(

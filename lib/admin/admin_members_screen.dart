@@ -105,42 +105,93 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
           ),
           const Divider(height: 1),
 
-          // Liste membres
+          // Liste membres avec abonnements
           Expanded(
-            child: StreamBuilder<List<UserModel>>(
-              stream: _svc.membersStream(limit: 20),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator(color: AppColors.green));
-                }
-                var members = snap.data ?? [];
+            child: StreamBuilder<List<SubscriptionModel>>(
+              // On écoute tous les abonnements pour pouvoir filtrer
+              stream: _svc.subscriptionsStream(),
+              builder: (context, subSnap) {
+                return StreamBuilder<List<UserModel>>(
+                  stream: _svc.membersStream(limit: 100),
+                  builder: (context, memberSnap) {
+                    if (memberSnap.connectionState == ConnectionState.waiting ||
+                        subSnap.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                          child: CircularProgressIndicator(color: AppColors.green));
+                    }
 
-                // Filtre recherche
-                if (_searchQuery.isNotEmpty) {
-                  members = members.where((m) =>
-                  m.fullName.toLowerCase().contains(_searchQuery) ||
-                      m.email.toLowerCase().contains(_searchQuery)).toList();
-                }
+                    final allMembers = memberSnap.data ?? [];
+                    final allSubscriptions = subSnap.data ?? [];
 
-                if (members.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.people_outline, size: 48, color: AppColors.textHint),
-                        const SizedBox(height: 12),
-                        Text('Aucun membre trouve',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: AppColors.textSecondary)),
-                      ],
-                    ),
-                  );
-                }
+                    // Construire la map userId -> dernière subscription
+                    final Map<String, SubscriptionModel> latestSubByUser = {};
+                    for (final sub in allSubscriptions) {
+                      final existing = latestSubByUser[sub.userId];
+                      if (existing == null ||
+                          sub.startDate.isAfter(existing.startDate)) {
+                        latestSubByUser[sub.userId] = sub;
+                      }
+                    }
 
-                return ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: members.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) => _MemberCard(member: members[i]),
+                    // Assembler UserWithSubscription
+                    var entries = allMembers.map((m) {
+                      return UserWithSubscription(
+                        user: m,
+                        subscription: latestSubByUser[m.uid],
+                      );
+                    }).toList();
+
+                    // Filtre par statut d'abonnement
+                    if (_statusFilter != 'all') {
+                      entries = entries.where((e) {
+                        if (e.subscription == null) return false;
+                        return e.subscription!.status.name == _statusFilter;
+                      }).toList();
+                    }
+
+                    // Filtre recherche
+                    if (_searchQuery.isNotEmpty) {
+                      entries = entries
+                          .where((e) =>
+                      e.user.fullName
+                          .toLowerCase()
+                          .contains(_searchQuery) ||
+                          e.user.email
+                              .toLowerCase()
+                              .contains(_searchQuery))
+                          .toList();
+                    }
+
+                    if (entries.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.people_outline,
+                                size: 48, color: AppColors.textHint),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Aucun membre trouve',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (_, i) => _MemberCard(
+                        member: entries[i].user,
+                        subscription: entries[i].subscription,
+                      ),
+                    );
+                  },
                 );
               },
             ),
@@ -154,15 +205,26 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
         ),
         backgroundColor: AppColors.green,
         icon: const Icon(Icons.person_add_outlined, color: Colors.white),
-        label: const Text('Nouveau membre', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('Nouveau membre',
+            style:
+            TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
     );
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _MemberCard : reçoit maintenant le dernier abonnement
+// ─────────────────────────────────────────────────────────────
+
 class _MemberCard extends StatelessWidget {
   final UserModel member;
-  const _MemberCard({required this.member});
+  final SubscriptionModel? subscription;
+
+  const _MemberCard({
+    required this.member,
+    this.subscription,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -178,9 +240,11 @@ class _MemberCard extends StatelessWidget {
           CircleAvatar(
             radius: 22,
             backgroundColor: AppColors.greenLight,
-            backgroundImage: (member.photoUrl != null && member.photoUrl!.isNotEmpty)
+            backgroundImage: (member.photoUrl != null &&
+                member.photoUrl!.isNotEmpty)
                 ? NetworkImage(member.photoUrl!)
-                : const AssetImage('assets/images/default_avatar.jpg') as ImageProvider,
+                : const AssetImage('assets/images/default_avatar.jpg')
+            as ImageProvider,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -188,22 +252,28 @@ class _MemberCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(member.fullName,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
                 Text(member.email,
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary)),
                 if (member.phone != null)
                   Text(member.phone!,
-                      style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+                      style: const TextStyle(
+                          fontSize: 11, color: AppColors.textHint)),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              _StatusPill(),
+              _StatusPill(subscription: subscription),
               const SizedBox(height: 6),
               IconButton(
-                icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),
+                icon: const Icon(Icons.more_vert,
+                    color: AppColors.textSecondary, size: 20),
                 onPressed: () => _showActions(context),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -226,21 +296,59 @@ class _MemberCard extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// _StatusPill : affiche le statut du dernier abonnement
+// ─────────────────────────────────────────────────────────────
+
 class _StatusPill extends StatelessWidget {
+  final SubscriptionModel? subscription;
+
+  const _StatusPill({this.subscription});
+
+  /// Couleur de fond selon le statut (provient du model)
+  Color get _bgColor {
+    if (subscription == null) return AppColors.textHint;
+    switch (subscription!.status) {
+      case SubscriptionStatus.active:
+        return Colors.green;
+      case SubscriptionStatus.expired:
+        return Colors.red;
+      case SubscriptionStatus.suspended:
+        return Colors.grey;
+      case SubscriptionStatus.pending:
+        return Colors.orange;
+    }
+  }
+
+  /// Libellé capitalisé du statut
+  String get _label {
+    if (subscription == null) return 'Aucun';
+    final name = subscription!.status.name;
+    return name[0].toUpperCase() + name.substring(1);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // En production : fetch depuis subscriptions
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: AppColors.greenLight,
+        color: _bgColor,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Text('Actif',
-          style: TextStyle(fontSize: 10, color: Color(0xFF0F6E56), fontWeight: FontWeight.w600)),
+      child: Text(
+        _label,
+        style: const TextStyle(
+            fontSize: 10,
+            color: Colors.white,
+            fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────
+// Bottom sheet actions
+// ─────────────────────────────────────────────────────────────
 
 class _MemberActionsSheet extends StatelessWidget {
   final UserModel member;
@@ -261,16 +369,23 @@ class _MemberActionsSheet extends StatelessWidget {
                 radius: 20,
                 backgroundColor: AppColors.greenLight,
                 child: Text(member.initials,
-                    style: const TextStyle(fontSize: 13, color: AppColors.green, fontWeight: FontWeight.w700)),
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.green,
+                        fontWeight: FontWeight.w700)),
               ),
               const SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(member.fullName,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                      style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary)),
                   Text(member.email,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.textSecondary)),
                 ],
               ),
             ],
@@ -279,11 +394,31 @@ class _MemberActionsSheet extends StatelessWidget {
           const Divider(height: 1),
           const SizedBox(height: 12),
 
-          _ActionTile(icon: Icons.edit_outlined, label: 'Modifier le profil', color: AppColors.navy, onTap: () {}),
-          _ActionTile(icon: Icons.card_membership_outlined, label: 'Gerer l\'abonnement', color: AppColors.green, onTap: () {}),
-          _ActionTile(icon: Icons.lock_reset_outlined, label: 'Reinitialiser le mot de passe', color: const Color(0xFF533AB7), onTap: () {}),
-          _ActionTile(icon: Icons.pause_circle_outline, label: 'Suspendre le compte', color: AppColors.amber, onTap: () {}),
-          _ActionTile(icon: Icons.delete_outline, label: 'Supprimer le compte', color: AppColors.red, onTap: () {}),
+          _ActionTile(
+              icon: Icons.edit_outlined,
+              label: 'Modifier le profil',
+              color: AppColors.navy,
+              onTap: () {}),
+          _ActionTile(
+              icon: Icons.card_membership_outlined,
+              label: 'Gerer l\'abonnement',
+              color: AppColors.green,
+              onTap: () {}),
+          _ActionTile(
+              icon: Icons.lock_reset_outlined,
+              label: 'Reinitialiser le mot de passe',
+              color: const Color(0xFF533AB7),
+              onTap: () {}),
+          _ActionTile(
+              icon: Icons.pause_circle_outline,
+              label: 'Suspendre le compte',
+              color: AppColors.amber,
+              onTap: () {}),
+          _ActionTile(
+              icon: Icons.delete_outline,
+              label: 'Supprimer le compte',
+              color: AppColors.red,
+              onTap: () {}),
         ],
       ),
     );
@@ -296,13 +431,19 @@ class _ActionTile extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _ActionTile({required this.icon, required this.label, required this.color, required this.onTap});
+  const _ActionTile(
+      {required this.icon,
+        required this.label,
+        required this.color,
+        required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: color, size: 22),
-      title: Text(label, style: TextStyle(fontSize: 14, color: color, fontWeight: FontWeight.w500)),
+      title: Text(label,
+          style: TextStyle(
+              fontSize: 14, color: color, fontWeight: FontWeight.w500)),
       onTap: () {
         Navigator.pop(context);
         onTap();
