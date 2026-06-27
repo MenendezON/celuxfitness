@@ -32,7 +32,12 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
   final _plans = ['standard', 'premium'];
   final _gender = ['homme', 'femme'];
   final _durations = ['1', '3', '6', '12'];
-  final _durationLabels = {'1': '1 mois', '3': '3 mois', '6': '6 mois', '12': '1 an'};
+  final _durationLabels = {
+    '1': '1 mois',
+    '3': '3 mois',
+    '6': '6 mois',
+    '12': '1 an',
+  };
 
   @override
   void dispose() {
@@ -50,12 +55,17 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
     try {
       // Creer le compte Firebase Auth avec mot de passe temporaire
       final tempPassword = _generateTempPassword();
-      final methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(_emailCtrl.text.trim());
+      final methods = await FirebaseAuth.instance.fetchSignInMethodsForEmail(
+        _emailCtrl.text.trim(),
+      );
       if (methods.isNotEmpty) {
         setState(() => _loading = false);
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cet email est déjà utilisé.'), backgroundColor: AppColors.red),
+          const SnackBar(
+            content: Text('Cet email est déjà utilisé.'),
+            backgroundColor: AppColors.red,
+          ),
         );
         return;
       }
@@ -88,7 +98,7 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
         firstName: _firstNameCtrl.text.trim(),
         lastName: _lastNameCtrl.text.trim(),
         email: _emailCtrl.text.trim(),
-        gender : _selectedGender,
+        gender: _selectedGender,
         phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         role: _selectedRole,
         createdAt: now,
@@ -102,13 +112,12 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
       // Creation du profil Firestore directement
       // Créer le user (ça switch de session)
 
-
       //final newAuth = userCredential.user!.uid;
       // (en production : Cloud Function cree le compte Auth + profile)
       final months = int.parse(_selectedDuration);
 
       final svc = FirestoreService();
-      //await svc.createMemberProfile(user);
+      await svc.createMemberProfile(user);
 
       // Creer l'abonnement initial
       await FirebaseFirestore.instance.collection('subscriptions').add({
@@ -124,10 +133,30 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Compte cree ! Email envoye a ${_emailCtrl.text.trim()}'),
+          content: Text(
+            'Compte cree ! Email envoye a ${_emailCtrl.text.trim()}',
+          ),
           backgroundColor: AppColors.green,
         ),
       );
+      await FirebaseFirestore.instance.collection("mail").add({
+        "to": [user.email],
+        "message": {
+          "subject": "Welcome to FitTrack",
+
+          "html": """
+            <h2>Welcome ${user.firstName} ${user.lastName}</h2>
+      
+            <p>Your account has been created.</p>
+      
+            <p>Email: ${user.email}</p>
+      
+            <p>Temporary password: $tempPassword</p>
+      
+            <p>Please change your password after your first login.</p>
+          """,
+        },
+      });
     } catch (e) {
       setState(() => _loading = false);
       if (!mounted) return;
@@ -139,7 +168,10 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
 
   String _generateTempPassword() {
     const chars = 'ABCDEFGHJKMNPQRSTWXYZabcdefghjkmnpqrstwxyz23456789';
-    return List.generate(10, (i) => chars[DateTime.now().microsecond % chars.length]).join();
+    return List.generate(
+      10,
+      (i) => chars[DateTime.now().microsecond % chars.length],
+    ).join();
   }
 
   @override
@@ -156,11 +188,16 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
             children: [
               // Info banner (US-014 : seul l'admin peut creer)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.greenLight,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border(left: BorderSide(color: AppColors.green, width: 3)),
+                  border: Border(
+                    left: BorderSide(color: AppColors.green, width: 3),
+                  ),
                 ),
                 child: const Text(
                   'Seul l\'administrateur peut creer un compte membre.\nUn mot de passe temporaire sera envoye par email.',
@@ -178,7 +215,8 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                     child: TextFormField(
                       controller: _firstNameCtrl,
                       decoration: const InputDecoration(labelText: 'Prenom *'),
-                      validator: (v) => (v == null || v.isEmpty) ? 'Requis' : null,
+                      validator:
+                          (v) => (v == null || v.isEmpty) ? 'Requis' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -186,7 +224,8 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                     child: TextFormField(
                       controller: _lastNameCtrl,
                       decoration: const InputDecoration(labelText: 'Nom *'),
-                      validator: (v) => (v == null || v.isEmpty) ? 'Requis' : null,
+                      validator:
+                          (v) => (v == null || v.isEmpty) ? 'Requis' : null,
                     ),
                   ),
                 ],
@@ -221,87 +260,97 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
               const SizedBox(height: 20),
               _SectionTitle(title: 'Sexe'),
               Row(
-                children: _gender.map((p) {
-                  final selected = _selectedGender == p;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: FilterChip(
-                      label: Text(p == 'homme' ? 'Homme' : 'Femme'),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _selectedGender = p),
-                      selectedColor: AppColors.green,
-                      labelStyle: TextStyle(
-                        color: selected ? Colors.white : AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      checkmarkColor: Colors.white,
-                    ),
-                  );
-                }).toList(),
+                children:
+                    _gender.map((p) {
+                      final selected = _selectedGender == p;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: FilterChip(
+                          label: Text(p == 'homme' ? 'Homme' : 'Femme'),
+                          selected: selected,
+                          onSelected:
+                              (_) => setState(() => _selectedGender = p),
+                          selectedColor: AppColors.green,
+                          labelStyle: TextStyle(
+                            color:
+                                selected ? Colors.white : AppColors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          checkmarkColor: Colors.white,
+                        ),
+                      );
+                    }).toList(),
               ),
 
               const SizedBox(height: 20),
               _SectionTitle(title: 'Role'),
               // Role selector
               Row(
-                children: UserRole.values.where((r) => r != UserRole.admin).map((r) {
-                  final selected = _selectedRole == r;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: FilterChip(
-                      label: Text(r.name == 'member' ? 'Membre' : 'Coach'),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _selectedRole = r),
-                      selectedColor: AppColors.navy,
-                      labelStyle: TextStyle(
-                        color: selected ? Colors.white : AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      checkmarkColor: Colors.white,
-                    ),
-                  );
-                }).toList(),
+                children:
+                    UserRole.values.where((r) => r != UserRole.admin).map((r) {
+                      final selected = _selectedRole == r;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: FilterChip(
+                          label: Text(r.name == 'member' ? 'Membre' : 'Coach'),
+                          selected: selected,
+                          onSelected: (_) => setState(() => _selectedRole = r),
+                          selectedColor: AppColors.navy,
+                          labelStyle: TextStyle(
+                            color:
+                                selected ? Colors.white : AppColors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          checkmarkColor: Colors.white,
+                        ),
+                      );
+                    }).toList(),
               ),
 
               const SizedBox(height: 20),
               _SectionTitle(title: 'Abonnement initial'),
               // Plan
               Row(
-                children: _plans.map((p) {
-                  final selected = _selectedPlan == p;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: FilterChip(
-                      label: Text(p == 'standard' ? 'Standard' : 'Premium'),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _selectedPlan = p),
-                      selectedColor: AppColors.green,
-                      labelStyle: TextStyle(
-                        color: selected ? Colors.white : AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      checkmarkColor: Colors.white,
-                    ),
-                  );
-                }).toList(),
+                children:
+                    _plans.map((p) {
+                      final selected = _selectedPlan == p;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: FilterChip(
+                          label: Text(p == 'standard' ? 'Standard' : 'Premium'),
+                          selected: selected,
+                          onSelected: (_) => setState(() => _selectedPlan = p),
+                          selectedColor: AppColors.green,
+                          labelStyle: TextStyle(
+                            color:
+                                selected ? Colors.white : AppColors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          checkmarkColor: Colors.white,
+                        ),
+                      );
+                    }).toList(),
               ),
 
               const SizedBox(height: 10),
               // Duree
               Wrap(
                 spacing: 8,
-                children: _durations.map((d) {
-                  final selected = _selectedDuration == d;
-                  return ChoiceChip(
-                    label: Text(_durationLabels[d]!),
-                    selected: selected,
-                    onSelected: (_) => setState(() => _selectedDuration = d),
-                    selectedColor: AppColors.navy,
-                    labelStyle: TextStyle(
-                      color: selected ? Colors.white : AppColors.textPrimary,
-                    ),
-                  );
-                }).toList(),
+                children:
+                    _durations.map((d) {
+                      final selected = _selectedDuration == d;
+                      return ChoiceChip(
+                        label: Text(_durationLabels[d]!),
+                        selected: selected,
+                        onSelected:
+                            (_) => setState(() => _selectedDuration = d),
+                        selectedColor: AppColors.navy,
+                        labelStyle: TextStyle(
+                          color:
+                              selected ? Colors.white : AppColors.textPrimary,
+                        ),
+                      );
+                    }).toList(),
               ),
 
               const SizedBox(height: 28),
@@ -309,10 +358,20 @@ class _CreateMemberScreenState extends State<CreateMemberScreen> {
                 height: 52,
                 child: ElevatedButton(
                   onPressed: _loading ? null : _createMember,
-                  child: _loading
-                      ? const SizedBox(width: 22, height: 22,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : const Text('Creer le compte', style: TextStyle(fontSize: 16)),
+                  child:
+                      _loading
+                          ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : const Text(
+                            'Creer le compte',
+                            style: TextStyle(fontSize: 16),
+                          ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -331,6 +390,10 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
     title,
-    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+    style: const TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: AppColors.textSecondary,
+    ),
   );
 }

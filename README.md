@@ -165,3 +165,6 @@ flutterfire configure
 - **Images** : Compresser avant upload avec `flutter_image_compress` (target < 500 Ko).
 - **Cloud Functions** : US-010 (rappel cours) et US-018 (notifs de masse) necessitent des Cloud Functions Node.js deployees sur Firebase.
 - **Pas de version web** : ce projet est exclusivement mobile iOS + Android.
+
+## TODO
+- **Finish the setup of cloud firestore sending email
