@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -18,6 +19,12 @@ void main() async {
   await Firebase.initializeApp();
 
   await initializeDateFormatting('fr', null); // ✅ remove `null`
+
+  // Lock the device orientation to portrait only
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown, // Optional: Includes upside-down portrait
+  ]);
 
   runApp(const CeluxGymApp());
 }

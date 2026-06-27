@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/models/models.dart';
 import '../../core/services/firestore_service.dart';
 import 'admin_create_member_screen.dart';
+import 'admin_edit_member_screen.dart';
+import 'admin_manage_subscription_screen.dart';
 
 // US-015 : consulter et gerer la liste des membres (admin)
 
@@ -50,19 +53,19 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
       ),
       body: Column(
         children: [
-          // Barre de recherche + filtres
           Container(
             color: AppColors.white,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             child: Column(
               children: [
-                // Recherche
                 TextField(
                   controller: _searchCtrl,
-                  onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                  onChanged: (v) =>
+                      setState(() => _searchQuery = v.toLowerCase()),
                   decoration: InputDecoration(
                     hintText: 'Rechercher un membre...',
-                    prefixIcon: const Icon(Icons.search, color: AppColors.textHint),
+                    prefixIcon:
+                    const Icon(Icons.search, color: AppColors.textHint),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
                       icon: const Icon(Icons.clear, size: 18),
@@ -72,11 +75,11 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
                       },
                     )
                         : null,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
                   ),
                 ),
                 const SizedBox(height: 10),
-                // Filtres statut
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
@@ -85,16 +88,21 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: FilterChip(
-                          label: Text(f.$2, style: const TextStyle(fontSize: 12)),
+                          label: Text(f.$2,
+                              style: const TextStyle(fontSize: 12)),
                           selected: selected,
-                          onSelected: (_) => setState(() => _statusFilter = f.$1),
+                          onSelected: (_) =>
+                              setState(() => _statusFilter = f.$1),
                           selectedColor: AppColors.navy,
                           labelStyle: TextStyle(
-                            color: selected ? Colors.white : AppColors.textPrimary,
+                            color: selected
+                                ? Colors.white
+                                : AppColors.textPrimary,
                             fontWeight: FontWeight.w500,
                           ),
                           checkmarkColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          padding:
+                          const EdgeInsets.symmetric(horizontal: 4),
                         ),
                       );
                     }).toList(),
@@ -105,25 +113,24 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
           ),
           const Divider(height: 1),
 
-          // Liste membres avec abonnements
           Expanded(
             child: StreamBuilder<List<SubscriptionModel>>(
-              // On écoute tous les abonnements pour pouvoir filtrer
               stream: _svc.subscriptionsStream(),
               builder: (context, subSnap) {
                 return StreamBuilder<List<UserModel>>(
                   stream: _svc.membersStream(limit: 100),
                   builder: (context, memberSnap) {
-                    if (memberSnap.connectionState == ConnectionState.waiting ||
+                    if (memberSnap.connectionState ==
+                        ConnectionState.waiting ||
                         subSnap.connectionState == ConnectionState.waiting) {
                       return const Center(
-                          child: CircularProgressIndicator(color: AppColors.green));
+                          child: CircularProgressIndicator(
+                              color: AppColors.green));
                     }
 
                     final allMembers = memberSnap.data ?? [];
                     final allSubscriptions = subSnap.data ?? [];
 
-                    // Construire la map userId -> dernière subscription
                     final Map<String, SubscriptionModel> latestSubByUser = {};
                     for (final sub in allSubscriptions) {
                       final existing = latestSubByUser[sub.userId];
@@ -133,7 +140,6 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
                       }
                     }
 
-                    // Assembler UserWithSubscription
                     var entries = allMembers.map((m) {
                       return UserWithSubscription(
                         user: m,
@@ -141,7 +147,6 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
                       );
                     }).toList();
 
-                    // Filtre par statut d'abonnement
                     if (_statusFilter != 'all') {
                       entries = entries.where((e) {
                         if (e.subscription == null) return false;
@@ -149,7 +154,6 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
                       }).toList();
                     }
 
-                    // Filtre recherche
                     if (_searchQuery.isNotEmpty) {
                       entries = entries
                           .where((e) =>
@@ -171,11 +175,12 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
                                 size: 48, color: AppColors.textHint),
                             const SizedBox(height: 12),
                             Text(
-                              'Aucun membre trouve',
+                              'Aucun membre trouvé',
                               style: Theme.of(context)
                                   .textTheme
                                   .titleMedium
-                                  ?.copyWith(color: AppColors.textSecondary),
+                                  ?.copyWith(
+                                  color: AppColors.textSecondary),
                             ),
                           ],
                         ),
@@ -185,10 +190,12 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
                     return ListView.separated(
                       padding: const EdgeInsets.all(16),
                       itemCount: entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, __) =>
+                      const SizedBox(height: 8),
                       itemBuilder: (_, i) => _MemberCard(
                         member: entries[i].user,
                         subscription: entries[i].subscription,
+                        svc: _svc,
                       ),
                     );
                   },
@@ -205,24 +212,22 @@ class _AdminMembersScreenState extends State<AdminMembersScreen> {
         ),
         backgroundColor: AppColors.green,
         icon: const Icon(Icons.person_add_outlined, color: Colors.white),
-        label: const Text('Nouveau membre',
-            style:
-            TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text(''),
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _MemberCard : reçoit maintenant le dernier abonnement
-// ─────────────────────────────────────────────────────────────
 
 class _MemberCard extends StatelessWidget {
   final UserModel member;
   final SubscriptionModel? subscription;
+  final FirestoreService svc;
 
   const _MemberCard({
     required this.member,
+    required this.svc,
     this.subscription,
   });
 
@@ -291,21 +296,21 @@ class _MemberCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => _MemberActionsSheet(member: member),
+      builder: (_) => _MemberActionsSheet(
+        member: member,
+        subscription: subscription,
+        svc: svc,
+      ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// _StatusPill : affiche le statut du dernier abonnement
-// ─────────────────────────────────────────────────────────────
 
 class _StatusPill extends StatelessWidget {
   final SubscriptionModel? subscription;
-
   const _StatusPill({this.subscription});
 
-  /// Couleur de fond selon le statut (provient du model)
   Color get _bgColor {
     if (subscription == null) return AppColors.textHint;
     switch (subscription!.status) {
@@ -320,7 +325,6 @@ class _StatusPill extends StatelessWidget {
     }
   }
 
-  /// Libellé capitalisé du statut
   String get _label {
     if (subscription == null) return 'Aucun';
     final name = subscription!.status.name;
@@ -332,37 +336,184 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: _bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        _label,
-        style: const TextStyle(
-            fontSize: 10,
-            color: Colors.white,
-            fontWeight: FontWeight.w600),
-      ),
+          color: _bgColor, borderRadius: BorderRadius.circular(20)),
+      child: Text(_label,
+          style: const TextStyle(
+              fontSize: 10,
+              color: Colors.white,
+              fontWeight: FontWeight.w600)),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────
-// Bottom sheet actions
+// Bottom sheet — toutes les actions câblées
 // ─────────────────────────────────────────────────────────────
 
 class _MemberActionsSheet extends StatelessWidget {
   final UserModel member;
-  const _MemberActionsSheet({required this.member});
+  final SubscriptionModel? subscription;
+  final FirestoreService svc;
+
+  const _MemberActionsSheet({
+    required this.member,
+    required this.svc,
+    this.subscription,
+  });
+
+  // ── Modifier le profil ─────────────────────────────────────
+  // Sync : on ferme le sheet via Navigator.pop DANS _ActionTile,
+  // puis on push depuis le contexte parent capturé avant le pop.
+  void _editProfile(NavigatorState nav) {
+    nav.push(MaterialPageRoute(
+        builder: (_) => AdminEditMemberScreen(member: member)));
+  }
+
+  // ── Gérer l'abonnement ────────────────────────────────────
+  void _manageSubscription(NavigatorState nav) {
+    nav.push(MaterialPageRoute(
+        builder: (_) => AdminManageSubscriptionScreen(member: member)));
+  }
+
+  // ── Réinitialiser le mot de passe ─────────────────────────
+  // Pour les actions async : on affiche le dialog AVANT de fermer le sheet,
+  // et on stocke messenger/navigator avant tout await.
+  Future<void> _resetPassword(
+      BuildContext sheetContext,
+      ScaffoldMessengerState messenger,
+      ) async {
+    final confirm = await showDialog<bool>(
+      context: sheetContext,
+      builder: (dlgCtx) => AlertDialog(
+        title: const Text('Réinitialiser le mot de passe'),
+        content: Text(
+            'Un email de réinitialisation sera envoyé à ${member.email}.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dlgCtx, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(dlgCtx, true),
+              child: const Text('Envoyer')),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    // Fermer le sheet avant l'opération async
+    if (sheetContext.mounted) Navigator.pop(sheetContext);
+
+    try {
+      await FirebaseAuth.instance
+          .sendPasswordResetEmail(email: member.email);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Email envoyé à ${member.email}'),
+        backgroundColor: AppColors.green,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('Erreur : $e'), backgroundColor: AppColors.red));
+    }
+  }
+
+  // ── Suspendre le compte ────────────────────────────────────
+  Future<void> _suspend(
+      BuildContext sheetContext,
+      ScaffoldMessengerState messenger,
+      ) async {
+    final confirm = await showDialog<bool>(
+      context: sheetContext,
+      builder: (dlgCtx) => AlertDialog(
+        title: const Text('Suspendre le compte'),
+        content: Text(
+            'L\'abonnement de ${member.fullName} sera suspendu. Confirmez-vous ?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dlgCtx, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.amber),
+            onPressed: () => Navigator.pop(dlgCtx, true),
+            child: const Text('Suspendre'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    // Fermer le sheet avant l'opération async
+    if (sheetContext.mounted) Navigator.pop(sheetContext);
+
+    try {
+      await svc.suspendLatestSubscription(member.uid);
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Compte suspendu'),
+        backgroundColor: AppColors.amber,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('Erreur : $e'), backgroundColor: AppColors.red));
+    }
+  }
+
+  // ── Supprimer le compte ────────────────────────────────────
+  Future<void> _delete(
+      BuildContext sheetContext,
+      ScaffoldMessengerState messenger,
+      ) async {
+    final confirm = await showDialog<bool>(
+      context: sheetContext,
+      builder: (dlgCtx) => AlertDialog(
+        title: const Text('Supprimer le compte'),
+        content: Text(
+          'Cette action est irréversible.\n\n'
+              '${member.fullName} sera supprimé de Firestore (profil + abonnements).\n\n'
+              'La suppression du compte Auth doit être faite via Cloud Function en production.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dlgCtx, false),
+              child: const Text('Annuler')),
+          ElevatedButton(
+            style:
+            ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () => Navigator.pop(dlgCtx, true),
+            child: const Text('Supprimer définitivement'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    // Fermer le sheet avant l'opération async
+    if (sheetContext.mounted) Navigator.pop(sheetContext);
+
+    try {
+      await svc.deleteMember(member.uid);
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Compte supprimé'),
+        backgroundColor: AppColors.red,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('Erreur : $e'), backgroundColor: AppColors.red));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    // Capturer navigator et messenger UNE FOIS, pendant que le widget
+    // est encore monté — ils restent valides même après fermeture du sheet.
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // En-tete
           Row(
             children: [
               CircleAvatar(
@@ -394,31 +545,43 @@ class _MemberActionsSheet extends StatelessWidget {
           const Divider(height: 1),
           const SizedBox(height: 12),
 
+          // Actions sync : _ActionTile pop le sheet, puis on push
           _ActionTile(
-              icon: Icons.edit_outlined,
-              label: 'Modifier le profil',
-              color: AppColors.navy,
-              onTap: () {}),
+            icon: Icons.edit_outlined,
+            label: 'Modifier le profil',
+            color: AppColors.navy,
+            onTap: () => _editProfile(nav),
+          ),
           _ActionTile(
-              icon: Icons.card_membership_outlined,
-              label: 'Gerer l\'abonnement',
-              color: AppColors.green,
-              onTap: () {}),
+            icon: Icons.card_membership_outlined,
+            label: 'Gérer l\'abonnement',
+            color: AppColors.green,
+            onTap: () => _manageSubscription(nav),
+          ),
+
+          // Actions async : NE PAS laisser _ActionTile pop le sheet —
+          // le pop est géré DANS la méthode, après le dialog.
           _ActionTile(
-              icon: Icons.lock_reset_outlined,
-              label: 'Reinitialiser le mot de passe',
-              color: const Color(0xFF533AB7),
-              onTap: () {}),
+            icon: Icons.lock_reset_outlined,
+            label: 'Réinitialiser le mot de passe',
+            color: const Color(0xFF533AB7),
+            popBeforeCall: false,
+            onTap: () => _resetPassword(context, messenger),
+          ),
           _ActionTile(
-              icon: Icons.pause_circle_outline,
-              label: 'Suspendre le compte',
-              color: AppColors.amber,
-              onTap: () {}),
+            icon: Icons.pause_circle_outline,
+            label: 'Suspendre le compte',
+            color: AppColors.amber,
+            popBeforeCall: false,
+            onTap: () => _suspend(context, messenger),
+          ),
           _ActionTile(
-              icon: Icons.delete_outline,
-              label: 'Supprimer le compte',
-              color: AppColors.red,
-              onTap: () {}),
+            icon: Icons.delete_outline,
+            label: 'Supprimer le compte',
+            color: AppColors.red,
+            popBeforeCall: false,
+            onTap: () => _delete(context, messenger),
+          ),
         ],
       ),
     );
@@ -430,12 +593,17 @@ class _ActionTile extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+  /// Si true (défaut), ferme le bottom sheet avant d'appeler onTap.
+  /// Mettre à false pour les actions async qui gèrent elles-mêmes le pop.
+  final bool popBeforeCall;
 
-  const _ActionTile(
-      {required this.icon,
-        required this.label,
-        required this.color,
-        required this.onTap});
+  const _ActionTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+    this.popBeforeCall = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -445,7 +613,7 @@ class _ActionTile extends StatelessWidget {
           style: TextStyle(
               fontSize: 14, color: color, fontWeight: FontWeight.w500)),
       onTap: () {
-        Navigator.pop(context);
+        if (popBeforeCall) Navigator.pop(context);
         onTap();
       },
       contentPadding: EdgeInsets.zero,
