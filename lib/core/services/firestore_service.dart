@@ -24,6 +24,18 @@ class FirestoreService {
         snap.docs.map((d) => UserModel.fromMap(d.data() as Map<String, dynamic>, d.id)).toList());
   }
 
+  // Liste des coaches pour le sélecteur du planning
+  Stream<List<UserModel>> coachesStream() {
+    return _db
+        .collection('users')
+        .where('role', isEqualTo: 'coach')
+        .orderBy('lastName')
+        .snapshots()
+        .map((snap) => snap.docs
+        .map((d) => UserModel.fromMap(d.data() as Map<String, dynamic>, d.id))
+        .toList());
+  }
+
   Future<void> createMemberProfile(UserModel user) async {
     await _db.collection('users').doc(user.uid).set(user.toMap());
   }

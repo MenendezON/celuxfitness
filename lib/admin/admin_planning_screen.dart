@@ -268,7 +268,6 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
   final _formKey = GlobalKey<FormState>();
   final _svc = FirestoreService();
   final _titleCtrl = TextEditingController();
-  final _coachCtrl = TextEditingController();
   final _roomCtrl = TextEditingController();
   final _capacityCtrl = TextEditingController(text: '12');
   final _durationCtrl = TextEditingController(text: '60');
@@ -278,6 +277,9 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
   String _selectedType = 'Yoga';
   bool _loading = false;
 
+  // Coach sélectionné depuis la liste Firestore
+  UserModel? _selectedCoach;
+
   final _types = ['Yoga', 'Cardio', 'Boxe', 'Muscu', 'Pilates', 'Zumba', 'Autre'];
 
   @override
@@ -286,20 +288,19 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
     final c = widget.course;
     if (c != null) {
       _titleCtrl.text = c.title;
-      _coachCtrl.text = c.coachName;
       _roomCtrl.text = c.room;
       _capacityCtrl.text = '${c.capacity}';
       _durationCtrl.text = '${c.durationMin}';
       _selectedDate = c.schedule;
       _selectedTime = TimeOfDay(hour: c.schedule.hour, minute: c.schedule.minute);
       _selectedType = c.type.isNotEmpty ? c.type : 'Yoga';
+      // _selectedCoach sera résolu une fois la liste coaches chargée (voir StreamBuilder)
     }
   }
 
   @override
   void dispose() {
     _titleCtrl.dispose();
-    _coachCtrl.dispose();
     _roomCtrl.dispose();
     _capacityCtrl.dispose();
     _durationCtrl.dispose();
@@ -308,6 +309,15 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedCoach == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Veuillez sélectionner un coach'),
+          backgroundColor: AppColors.red,
+        ),
+      );
+      return;
+    }
     setState(() => _loading = true);
 
     final schedule = DateTime(
@@ -318,8 +328,8 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
     final course = CourseModel(
       id: widget.course?.id ?? '',
       title: _titleCtrl.text.trim(),
-      coachId: '',
-      coachName: _coachCtrl.text.trim(),
+      coachId: _selectedCoach!.uid,
+      coachName: _selectedCoach!.fullName,
       schedule: schedule,
       durationMin: int.tryParse(_durationCtrl.text) ?? 60,
       capacity: int.tryParse(_capacityCtrl.text) ?? 12,
@@ -378,10 +388,98 @@ class _CreateCourseSheetState extends State<_CreateCourseSheet> {
               ),
               const SizedBox(height: 12),
 
-              TextFormField(
-                controller: _coachCtrl,
-                decoration: const InputDecoration(labelText: 'Coach *', prefixIcon: Icon(Icons.person_outline)),
-                validator: (v) => (v == null || v.isEmpty) ? 'Requis' : null,
+              // Sélecteur de coach — chargé depuis Firestore (role == coach)
+              StreamBuilder<List<UserModel>>(
+                stream: _svc.coachesStream(),
+                builder: (context, snap) {
+                  final coaches = snap.data ?? [];
+
+                  // Résoudre _selectedCoach depuis la liste courante pour garantir
+                  // que c'est la même instance que le DropdownMenuItem — requis par Flutter.
+                  UserModel? resolvedCoach;
+                  if (_selectedCoach != null) {
+                    // Chercher par uid dans la liste fraîche
+                    final match = coaches.where((c) => c.uid == _selectedCoach!.uid);
+                    resolvedCoach = match.isNotEmpty ? match.first : null;
+                  } else if (widget.course != null && coaches.isNotEmpty) {
+                    // Mode édition : pré-sélectionner le coach du cours
+                    final match = coaches.where((c) => c.uid == widget.course!.coachId);
+                    if (match.isNotEmpty) {
+                      resolvedCoach = match.first;
+                      // Stocker pour que _save() puisse y accéder
+                      WidgetsBinding.instance.addPostFrameCallback(
+                              (_) => setState(() => _selectedCoach = resolvedCoach));
+                    }
+                  }
+
+                  if (snap.connectionState == ConnectionState.waiting &&
+                      coaches.isEmpty) {
+                    return const InputDecorator(
+                      decoration: InputDecoration(labelText: 'Coach *'),
+                      child: SizedBox(
+                        height: 20,
+                        child: LinearProgressIndicator(),
+                      ),
+                    );
+                  }
+
+                  if (coaches.isEmpty) {
+                    return InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Coach *'),
+                      child: Text(
+                        'Aucun coach disponible — créez d\'abord un compte coach',
+                        style: TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    );
+                  }
+
+                  return DropdownButtonFormField<UserModel>(
+                    value: resolvedCoach,
+                    decoration: const InputDecoration(
+                      labelText: 'Coach *',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                    hint: const Text('Sélectionner un coach'),
+                    isExpanded: true,
+                    items: coaches.map((coach) {
+                      return DropdownMenuItem<UserModel>(
+                        value: coach,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 14,
+                              backgroundColor: AppColors.greenLight,
+                              backgroundImage: (coach.photoUrl != null &&
+                                  coach.photoUrl!.isNotEmpty)
+                                  ? NetworkImage(coach.photoUrl!)
+                                  : null,
+                              child: (coach.photoUrl == null ||
+                                  coach.photoUrl!.isEmpty)
+                                  ? Text(coach.initials,
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      color: AppColors.green,
+                                      fontWeight: FontWeight.w700))
+                                  : null,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                coach.fullName,
+                                style: const TextStyle(fontSize: 14),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (v) => setState(() => _selectedCoach = v),
+                    validator: (_) =>
+                    _selectedCoach == null ? 'Requis' : null,
+                  );
+                },
               ),
               const SizedBox(height: 12),
 

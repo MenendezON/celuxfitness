@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 enum UserRole { member, coach, admin }
@@ -66,9 +67,16 @@ class UserModel {
     'role': role.name,
     'level': level,
     'goal': goal,
-    'createdAt': createdAt,
+    'createdAt': Timestamp.fromDate(createdAt),
     'createdByAdmin': createdByAdmin,
   };
+
+  // Égalité basée sur l'uid — requis pour DropdownButtonFormField
+  @override
+  bool operator ==(Object other) => other is UserModel && other.uid == uid;
+
+  @override
+  int get hashCode => uid.hashCode;
 }
 
 class SubscriptionModel {
@@ -112,8 +120,8 @@ class SubscriptionModel {
   Map<String, dynamic> toMap() => {
     'userId': userId,
     'plan': plan,
-    'startDate': startDate,
-    'endDate': endDate,
+    'startDate': Timestamp.fromDate(startDate),
+    'endDate': Timestamp.fromDate(endDate),
     'status': status.name,
     'paymentMethod': paymentMethod,
   };
@@ -189,7 +197,7 @@ class CourseModel {
     'title': title,
     'coachId': coachId,
     'coachName': coachName,
-    'schedule': schedule,
+    'schedule': Timestamp.fromDate(schedule),
     'durationMin': durationMin,
     'capacity': capacity,
     'enrolledCount': enrolledCount,
@@ -225,7 +233,7 @@ class BookingModel {
     'userId': userId,
     'courseId': courseId,
     'status': status,
-    'bookedAt': bookedAt,
+    'bookedAt': Timestamp.fromDate(bookedAt),
   };
 }
 
@@ -264,6 +272,6 @@ class NotificationModel {
     'body': body,
     'type': type,
     'read': read,
-    'createdAt': createdAt,
+    'createdAt': Timestamp.fromDate(createdAt),
   };
 }
