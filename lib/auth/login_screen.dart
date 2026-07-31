@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
         dest = const CoachHomeScreen();
         break;
       default:
-        dest = const MemberHomeScreen();
+        dest = MemberHomeScreen(user: user,);
     }
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => dest));
   }

@@ -8,10 +8,11 @@ import 'admin_create_member_screen.dart';
 import 'admin_members_screen.dart';
 import 'admin_planning_screen.dart';
 import 'admin_notifications_screen.dart';
+import 'admin_about_screen.dart';
+import 'admin_reglement_screen.dart';
 import '../widgets/stat_card.dart';
 
 // US-017 : tableau de bord admin
-// Acces a US-014, US-015, US-016, US-018 via navigation
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -69,7 +70,21 @@ class _DashboardTab extends StatelessWidget {
                   if (!context.mounted) return;
                   Navigator.pushReplacementNamed(context, '/login');
                   break;
-                case 'about' :
+                case 'about':
+                  if (!context.mounted) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const AdminAboutScreen()),
+                  );
+                  break;
+                case 'reglement':
+                  if (!context.mounted) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (_) => const AdminReglementScreen()),
+                  );
                   break;
               }
             },
@@ -78,9 +93,9 @@ class _DashboardTab extends StatelessWidget {
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout, size: 18, color: Colors.black,),
+                    Icon(Icons.logout, size: 18, color: Colors.black),
                     SizedBox(width: 8),
-                    Text('Logout'),
+                    Text('Déconnexion'),
                   ],
                 ),
               ),
@@ -88,7 +103,19 @@ class _DashboardTab extends StatelessWidget {
                 value: 'about',
                 child: Row(
                   children: [
-                    Text('A propos'),
+                    Icon(Icons.info_outline, size: 18, color: Colors.black),
+                    SizedBox(width: 8),
+                    Text('À propos'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'reglement',
+                child: Row(
+                  children: [
+                    Icon(Icons.menu_book_outlined, size: 18, color: Colors.black),
+                    SizedBox(width: 8),
+                    Text('Règlement intérieur'),
                   ],
                 ),
               ),
@@ -101,33 +128,48 @@ class _DashboardTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // KPIs (US-017)
             Row(
               children: [
                 Text('Vue d\'ensemble : ', style: Theme.of(context).textTheme.titleMedium),
-                Text(DateFormat('EEEE d MMMM yyyy', 'fr').format(DateTime.now()))
+                Text(DateFormat('EEEE d MMMM yyyy', 'fr').format(DateTime.now())),
               ],
             ),
             const SizedBox(height: 10),
-            FutureBuilder<Map<String, dynamic>>(
-              future: svc.adminDashboardStats(),
+            StreamBuilder<Map<String, dynamic>>(
+              stream: svc.dashboardStatsStream(),
               builder: (context, snap) {
                 final data = snap.data ?? {};
+                final loading = snap.connectionState == ConnectionState.waiting;
+
+                // Formatage des revenus en FCFA lisible
+                String fmtFcfa(int amount) {
+                  if (amount >= 1000000) {
+                    return '${(amount / 1000000).toStringAsFixed(2)}M';
+                  } else if (amount >= 1000) {
+                    return '${(amount / 1000).toStringAsFixed(0)}k';
+                  }
+                  return '$amount';
+                }
+
+                final revenuTotal = data['revenuTotal'] as int? ?? 0;
+                final expiringSoon = data['expiringSoon'] as int? ?? 0;
+
                 return Column(
                   children: [
                     Row(
                       children: [
                         Expanded(child: StatCard(
                           label: 'Membres actifs',
-                          value: '${data['activeMembers'] ?? '--'}',
+                          value: loading ? '--' : '${data['activeMembers'] ?? 0}',
                           accentColor: AppColors.green,
                         )),
                         const SizedBox(width: 10),
                         Expanded(child: StatCard(
                           label: 'Expirations < 7j',
-                          value: '${data['expiringSoon'] ?? '--'}',
-                          accentColor: data['expiringSoon'] != null && data['expiringSoon'] > 0
-                              ? AppColors.amber : AppColors.textHint,
+                          value: loading ? '--' : '$expiringSoon',
+                          accentColor: expiringSoon > 0
+                              ? AppColors.amber
+                              : AppColors.textHint,
                         )),
                       ],
                     ),
@@ -136,12 +178,12 @@ class _DashboardTab extends StatelessWidget {
                       children: [
                         Expanded(child: StatCard(
                           label: 'Cours ce mois',
-                          value: '${data['monthCourses'] ?? '--'}',
+                          value: loading ? '--' : '${data['monthCourses'] ?? 0}',
                         )),
                         const SizedBox(width: 10),
                         Expanded(child: StatCard(
                           label: 'Revenus (FCFA)',
-                          value: '1.24M',
+                          value: loading ? '--' : fmtFcfa(revenuTotal),
                           accentColor: AppColors.green,
                         )),
                       ],
@@ -152,15 +194,11 @@ class _DashboardTab extends StatelessWidget {
             ),
 
             const SizedBox(height: 20),
-
-            // Acces rapides
             Text('Actions rapides', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             _QuickActions(),
 
             const SizedBox(height: 20),
-
-            // Derniers membres
             Text('Derniers membres inscrits', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 10),
             _RecentMembers(),
@@ -204,7 +242,9 @@ class _QuickActions extends StatelessWidget {
                 children: [
                   Icon(a.$1, color: a.$3, size: 24),
                   const SizedBox(height: 6),
-                  Text(a.$2, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary), textAlign: TextAlign.center),
+                  Text(a.$2,
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      textAlign: TextAlign.center),
                 ],
               ),
             ),
@@ -223,59 +263,35 @@ class _RecentMembers extends StatelessWidget {
     return StreamBuilder<List<UserModel>>(
       stream: svc.membersStream(limit: 5),
       builder: (context, userSnap) {
-        if (userSnap.hasError) {
-          return Text('Erreur: ${userSnap.error}');
-        }
-
+        if (userSnap.hasError) return Text('Erreur: ${userSnap.error}');
         if (userSnap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppColors.green),
-          );
+          return const Center(child: CircularProgressIndicator(color: AppColors.green));
         }
 
         final members = userSnap.data ?? [];
-
         if (members.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Aucun membre'),
-          );
+          return const Padding(padding: EdgeInsets.all(16), child: Text('Aucun membre'));
         }
 
-        // 🔥 SECOND STREAM: subscriptions
         return StreamBuilder<List<SubscriptionModel>>(
           stream: svc.subscriptionsStream(),
           builder: (context, subSnap) {
             final subs = subSnap.data ?? [];
-
-            // 🔥 build map userId -> subscription
-            final subMap = {
-              for (final s in subs) s.userId: s,
-            };
-
-            // 🔥 combine
-            final combined = members.map((m) {
-              return UserWithSubscription(
-                user: m,
-                subscription: subMap[m.uid],
-              );
-            }).toList();
+            final subMap = {for (final s in subs) s.userId: s};
+            final combined = members.map((m) => UserWithSubscription(
+              user: m,
+              subscription: subMap[m.uid],
+            )).toList();
 
             return Container(
               decoration: BoxDecoration(
                 color: AppColors.white,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.borderGray,
-                  width: 0.5,
-                ),
+                border: Border.all(color: AppColors.borderGray, width: 0.5),
               ),
               child: Column(
                 children: combined
-                    .map((item) => _MemberRow(
-                  member: item.user,
-                  subscription: item.subscription,
-                ))
+                    .map((item) => _MemberRow(member: item.user, subscription: item.subscription))
                     .toList(),
               ),
             );
@@ -290,10 +306,7 @@ class _MemberRow extends StatelessWidget {
   final UserModel member;
   final SubscriptionModel? subscription;
 
-  const _MemberRow({
-    required this.member,
-    this.subscription,
-  });
+  const _MemberRow({required this.member, this.subscription});
 
   @override
   Widget build(BuildContext context) {
@@ -313,25 +326,29 @@ class _MemberRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(member.fullName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
-                Text(member.email, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                Text(subscription?.plan ?? 'No subscription'),
+                Text(member.fullName,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary)),
+                Text(member.email,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                Text(subscription?.plan ?? 'Aucun abonnement',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: subscription?.statusColor,
-              borderRadius: BorderRadius.circular(5),
+          if (subscription != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: subscription!.statusColor,
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                subscription!.status.name[0].toUpperCase() +
+                    subscription!.status.name.substring(1),
+                style: const TextStyle(
+                    fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600),
+              ),
             ),
-            child: Text(subscription?.status.name != null
-                ? subscription!.status.name[0].toUpperCase() +
-                subscription!.status.name.substring(1)
-                : '',
-                style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w600),
-            ),
-          ),
         ],
       ),
     );

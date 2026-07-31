@@ -110,7 +110,7 @@ class _RoleRouter extends StatelessWidget {
           case UserRole.coach:
             return const CoachHomeScreen();
           default:
-            return const MemberHomeScreen();
+            return MemberHomeScreen(user: user);
         }
       },
     );

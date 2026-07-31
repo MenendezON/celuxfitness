@@ -278,6 +278,72 @@ class FirestoreService {
     return snap.docs.isNotEmpty;
   }
 
+  // Stats membre : séances assistées, durée totale, streak journalier
+  Stream<Map<String, dynamic>> memberStatsStream(String userId) {
+    return _db
+        .collection('bookings')
+        .where('userId', isEqualTo: userId)
+        .where('status', isEqualTo: 'attended')
+        .snapshots()
+        .asyncMap((snap) async {
+      final bookings = snap.docs
+          .map((d) => BookingModel.fromMap(d.data() as Map<String, dynamic>, d.id))
+          .toList();
+
+      if (bookings.isEmpty) {
+        return {'seances': 0, 'dureeMin': 0, 'streak': 0};
+      }
+
+      // Fetch tous les cours associés en parallèle
+      final courseIds = bookings.map((b) => b.courseId).toSet().toList();
+      final courseFutures = courseIds.map((id) => _db.collection('courses').doc(id).get());
+      final courseDocs = await Future.wait(courseFutures);
+
+      final Map<String, int> durationByCourseId = {};
+      for (final doc in courseDocs) {
+        if (doc.exists) {
+          final data = doc.data() as Map<String, dynamic>;
+          durationByCourseId[doc.id] = (data['durationMin'] as num?)?.toInt() ?? 0;
+        }
+      }
+
+      // Durée totale
+      int totalMin = 0;
+      for (final b in bookings) {
+        totalMin += durationByCourseId[b.courseId] ?? 0;
+      }
+
+      // Streak : jours consécutifs jusqu'à aujourd'hui
+      final attendedDays = bookings
+          .map((b) {
+        final d = b.bookedAt;
+        return DateTime(d.year, d.month, d.day);
+      })
+          .toSet()
+          .toList()
+        ..sort((a, b) => b.compareTo(a)); // desc
+
+      int streak = 0;
+      DateTime cursor = DateTime(
+          DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+      for (final day in attendedDays) {
+        if (day == cursor) {
+          streak++;
+          cursor = cursor.subtract(const Duration(days: 1));
+        } else if (day.isBefore(cursor)) {
+          break; // jour manqué → streak rompu
+        }
+      }
+
+      return {
+        'seances': bookings.length,
+        'dureeMin': totalMin,
+        'streak': streak,
+      };
+    });
+  }
+
   // ─── NOTIFICATIONS ────────────────────────────────────────
 
   Stream<List<NotificationModel>> notificationsStream(String userId) {
@@ -296,37 +362,126 @@ class FirestoreService {
     await _db.collection('notifications').doc(notifId).update({'read': true});
   }
 
+  // Historique des cours passés (attended ou absent)
+  Stream<List<Map<String, dynamic>>> pastBookingsStream(String userId) {
+    return _db
+        .collection('bookings')
+        .where('userId', isEqualTo: userId)
+        .where('status', whereIn: ['attended', 'absent'])
+        .orderBy('bookedAt', descending: true)
+        .limit(20)
+        .snapshots()
+        .asyncMap((snap) async {
+      final bookings = snap.docs
+          .map((d) => BookingModel.fromMap(d.data() as Map<String, dynamic>, d.id))
+          .toList();
+      final results = <Map<String, dynamic>>[];
+      for (final b in bookings) {
+        final courseDoc = await _db.collection('courses').doc(b.courseId).get();
+        if (!courseDoc.exists) continue;
+        final course = CourseModel.fromMap(
+            courseDoc.data() as Map<String, dynamic>, courseDoc.id);
+        results.add({'booking': b, 'course': course});
+      }
+      return results;
+    });
+  }
+
+  // Prochains cours réservés (confirmed, dans le futur)
+  Stream<List<Map<String, dynamic>>> upcomingBookingsStream(String userId) {
+    final now = Timestamp.fromDate(DateTime.now());
+    return _db
+        .collection('bookings')
+        .where('userId', isEqualTo: userId)
+        .where('status', isEqualTo: 'confirmed')
+        .snapshots()
+        .asyncMap((snap) async {
+      final bookings = snap.docs
+          .map((d) => BookingModel.fromMap(d.data() as Map<String, dynamic>, d.id))
+          .toList();
+
+      final results = <Map<String, dynamic>>[];
+      for (final b in bookings) {
+        final courseDoc = await _db.collection('courses').doc(b.courseId).get();
+        if (!courseDoc.exists) continue;
+        final course = CourseModel.fromMap(
+            courseDoc.data() as Map<String, dynamic>, courseDoc.id);
+        if (course.schedule.isAfter(DateTime.now())) {
+          results.add({'booking': b, 'course': course});
+        }
+      }
+      results.sort((a, b) =>
+          (a['course'] as CourseModel).schedule
+              .compareTo((b['course'] as CourseModel).schedule));
+      return results;
+    });
+  }
+
   // ─── ADMIN STATS ─────────────────────────────────────────
+  // Calcul côté client depuis les snapshots — évite .count() qui
+  // nécessite Firestore v9.14+ et des index supplémentaires.
 
-  Future<Map<String, dynamic>> adminDashboardStats() async {
+  static const int prixMensualite = 15000; // FCFA
+  static const int prixSeance    = 1000;   // FCFA
+
+  Stream<Map<String, dynamic>> dashboardStatsStream() {
     final now = DateTime.now();
-    final monthStart = DateTime(now.year, now.month, 1);
-    final in7days = now.add(const Duration(days: 7));
+    final monthStart = Timestamp.fromDate(DateTime(now.year, now.month, 1));
+    final in7days    = Timestamp.fromDate(now.add(const Duration(days: 7)));
 
-    final activeMembers = await _db
+    // Stream abonnements
+    final subStream = _db
         .collection('subscriptions')
-        .where('status', isEqualTo: 'active')
-        .count()
-        .get();
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList());
 
-    final expiringSoon = await _db
-        .collection('subscriptions')
-        .where('status', isEqualTo: 'active')
-        .where('endDate', isLessThanOrEqualTo: in7days)
-        .count()
-        .get();
-
-    final monthCourses = await _db
+    // Stream cours du mois
+    final courseStream = _db
         .collection('courses')
         .where('schedule', isGreaterThanOrEqualTo: monthStart)
-        .count()
-        .get();
+        .snapshots()
+        .map((snap) => snap.docs.map((d) => d.data()).toList());
 
-    return {
-      'activeMembers': activeMembers.count ?? 0,
-      'expiringSoon': expiringSoon.count ?? 0,
-      'monthCourses': monthCourses.count ?? 0,
-    };
+    // Combiner les deux streams
+    return subStream.asyncMap((subs) async {
+      final coursesSnap = await _db
+          .collection('courses')
+          .where('schedule', isGreaterThanOrEqualTo: monthStart)
+          .get();
+
+      final activeSubs = subs
+          .where((s) => s['status'] == 'active')
+          .toList();
+
+      final expiringSoon = activeSubs.where((s) {
+        final endDate = (s['endDate'] as Timestamp?)?.toDate();
+        if (endDate == null) return false;
+        return endDate.isBefore(now.add(const Duration(days: 7)));
+      }).length;
+
+      final monthCourses = coursesSnap.docs.length;
+
+      // Revenus du mois : abonnements actifs × mensualité
+      // + séances individuelles (bookings confirmed du mois)
+      final bookingsSnap = await _db
+          .collection('bookings')
+          .where('status', isEqualTo: 'confirmed')
+          .where('bookedAt', isGreaterThanOrEqualTo: monthStart)
+          .get();
+
+      final revenuMensualites = activeSubs.length * prixMensualite;
+      final revenuSeances     = bookingsSnap.docs.length * prixSeance;
+      final revenuTotal       = revenuMensualites + revenuSeances;
+
+      return {
+        'activeMembers': activeSubs.length,
+        'expiringSoon':  expiringSoon,
+        'monthCourses':  monthCourses,
+        'revenuTotal':   revenuTotal,
+        'revenuMensualites': revenuMensualites,
+        'revenuSeances':     revenuSeances,
+      };
+    });
   }
 
   Stream<List<SubscriptionModel>> subscriptionsStream() {
